@@ -11,6 +11,59 @@
         h1 { color: #333; }
         #taskFormContainer div { margin-bottom: 10px; } /* Basic styling for form rows */
         label { display: inline-block; width: 100px; } /* Align labels */
+
+        /* Basic styles for Gantt Chart Area */
+        #ganttSection {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+
+        #ganttTimelineHeader {
+            display: flex; /* Use flexbox for timeline units */
+            border-bottom: 2px solid #666;
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            min-height: 20px; /* Ensure it's visible even if empty initially */
+            overflow-x: auto; /* Allow horizontal scrolling for timeline */
+            /* Add more styling for header units later */
+        }
+
+        #ganttDisplayArea {
+            position: relative; /* Needed for absolute positioning of task bars */
+            min-height: 100px;  /* Min height to be visible */
+            overflow-x: auto; /* Allow horizontal scrolling if chart is wide */
+            /* Add more styling as needed, e.g., background */
+        }
+
+        .gantt-task-bar {
+            position: absolute; /* Positioned relative to ganttDisplayArea */
+            height: 20px;
+            background-color: #3498db;
+            border: 1px solid #2980b9;
+            color: white;
+            font-size: 12px;
+            text-align: center;
+            line-height: 20px; /* Vertically center text */
+            border-radius: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-sizing: border-box; /* Include padding and border in element's total width and height */
+        }
+
+        /* Example style for a timeline unit in the header */
+        .timeline-unit {
+            flex-shrink: 0; /* Prevent units from shrinking below their specified width */
+            text-align: center;
+            border-right: 1px solid #eee;
+            padding: 2px;
+            font-size: 10px;
+            box-sizing: border-box;
+        }
+        .timeline-unit:last-child {
+            border-right: none;
+        }
     </style>
 </head>
 <body>
@@ -43,78 +96,177 @@
             <!-- Tasks will be loaded here by JavaScript -->
         </ul>
     </div>
+    <hr>
 
-    <!-- Placeholder for Gantt chart area -->
-    <div id="ganttChartArea">
+    <div id="ganttSection">
         <h2>Gantt Chart</h2>
-        <!-- Gantt chart will be rendered here -->
+        <div id="ganttTimelineHeader">
+            <!-- Timeline headers (e.g., days, weeks) will go here -->
+        </div>
+        <div id="ganttDisplayArea">
+            <!-- Gantt bars will be rendered here -->
+        </div>
     </div>
 
     <script>
         $(document).ready(function() {
             console.log("Document ready. jQuery is loaded.");
-            
-            // Make loadTasks globally accessible or ensure it's callable after task creation
-            window.loadTasks = function() { // Changed to be globally accessible
+
+            const PIXELS_PER_DAY = 30; 
+            let projectStartDate = null; 
+            let projectEndDate = null; // To store the latest end date for timeline generation
+
+            window.loadTasks = function() {
                 $.ajax({
                     url: "/api/tasks",
                     type: "GET",
                     dataType: "json",
                     success: function(tasks) {
-                        var taskList = $("#tasks");
-                        taskList.empty();
+                        var taskListUl = $("#tasks");
+                        var ganttDisplayArea = $("#ganttDisplayArea");
+                        var ganttTimelineHeader = $("#ganttTimelineHeader"); // Get the header div
+                        
+                        taskListUl.empty();
+                        ganttDisplayArea.empty();
+                        ganttTimelineHeader.empty(); // Clear previous timeline header
+
                         if (tasks && tasks.length > 0) {
+                            projectStartDate = null; // Reset for each load
+                            projectEndDate = null;   // Reset for each load
+
+                            // First pass: determine project start and end dates
                             tasks.forEach(function(task) {
-                                var startDate = task.startDate ? new Date(task.startDate).toLocaleDateString() : 'N/A';
-                                var endDate = task.endDate ? new Date(task.endDate).toLocaleDateString() : 'N/A';
-                                taskList.append(
+                                if (task.startDate) { 
+                                    var currentTaskStartDate = new Date(task.startDate);
+                                    if (!projectStartDate || currentTaskStartDate < projectStartDate) {
+                                        projectStartDate = currentTaskStartDate;
+                                    }
+                                }
+                                if (task.endDate) {
+                                    var currentTaskEndDate = new Date(task.endDate);
+                                    if (!projectEndDate || currentTaskEndDate > projectEndDate) {
+                                        projectEndDate = currentTaskEndDate;
+                                    }
+                                }
+                            });
+
+                            // Normalize projectStartDate or default
+                            if (!projectStartDate) {
+                                projectStartDate = new Date(); // Default to today if no tasks have start dates
+                            }
+                            projectStartDate.setHours(0,0,0,0); // Normalize to start of day
+
+                            // Normalize projectEndDate or default
+                            if (!projectEndDate) {
+                                projectEndDate = new Date(projectStartDate);
+                                projectEndDate.setDate(projectStartDate.getDate() + 30); // Default to 30 days from start if no tasks define end
+                            }
+                            projectEndDate.setHours(23,59,59,999); // Normalize to end of day
+
+
+                            // Render Timeline Header
+                            if (projectStartDate && projectEndDate && projectEndDate >= projectStartDate) {
+                                let currentDate = new Date(projectStartDate); // Clone projectStartDate for iteration
+                                while (currentDate <= projectEndDate) {
+                                    var dayOfMonth = currentDate.getDate();
+                                    var month = currentDate.getMonth() + 1; // Month is 0-indexed
+
+                                    var timelineUnit = $("<div></div>")
+                                        .addClass("timeline-unit")
+                                        .css({
+                                            "width": PIXELS_PER_DAY + "px", // Each unit is one day wide
+                                            "min-width": PIXELS_PER_DAY + "px" // Prevent shrinking (flex-shrink: 0 in CSS is better)
+                                        })
+                                        .text(dayOfMonth + "/" + month); // Display day/month
+                                    
+                                    ganttTimelineHeader.append(timelineUnit);
+                                    currentDate.setDate(currentDate.getDate() + 1); // Move to next day
+                                }
+                            }
+
+                            // Render Task Bars (existing logic)
+                            tasks.forEach(function(task, index) {
+                                // 1. Display in the list
+                                var startDateFmt = task.startDate ? new Date(task.startDate).toLocaleDateString() : 'N/A';
+                                var endDateFmt = task.endDate ? new Date(task.endDate).toLocaleDateString() : 'N/A';
+                                taskListUl.append(
                                     "<li>" +
                                     "ID: " + task.id + ", " +
                                     "Name: " + task.name + ", " +
-                                    "Start: " + startDate + ", " +
-                                    "End: " + endDate +
+                                    "Start: " + startDateFmt + ", " +
+                                    "End: " + endDateFmt +
                                     "</li>"
                                 );
+
+                                // 2. Render Gantt Bar
+                                if (task.startDate && task.endDate) {
+                                    var taskStartDate = new Date(task.startDate);
+                                    var taskEndDate = new Date(task.endDate);
+
+                                    if (taskEndDate < taskStartDate) {
+                                        console.warn("Task " + task.id + " ("+ task.name +") has end date before start date.");
+                                        // return; // Do not render bar if dates are invalid
+                                    }
+
+                                    var durationDays = Math.max(0, Math.round((taskEndDate - taskStartDate) / (1000 * 60 * 60 * 24)) + 1);
+                                    var offsetDays = Math.max(0, Math.round((taskStartDate - projectStartDate) / (1000 * 60 * 60 * 24)));
+
+                                    var barLeft = offsetDays * PIXELS_PER_DAY;
+                                    var barWidth = durationDays * PIXELS_PER_DAY;
+
+                                    var taskBar = $("<div></div>")
+                                        .addClass("gantt-task-bar")
+                                        .css({
+                                            "left": barLeft + "px",
+                                            "width": barWidth + "px",
+                                            "top": (index * 30) + "px" 
+                                        })
+                                        .text(task.name + " (ID: " + task.id + ")");
+                                    
+                                    ganttDisplayArea.append(taskBar);
+                                }
                             });
                         } else {
-                            taskList.append("<li>No tasks found.</li>");
+                            taskListUl.append("<li>No tasks found.</li>");
+                            ganttDisplayArea.append("<p>No tasks to display in Gantt chart.</p>");
+                            ganttTimelineHeader.append("<p>No timeline to display.</p>"); // Message for timeline
                         }
                     },
                     error: function(xhr, status, error) {
                         console.error("Error loading tasks: ", status, error);
                         $("#tasks").empty().append("<li>Error loading tasks. Check console.</li>");
+                        $("#ganttDisplayArea").empty().append("<p>Error loading tasks for Gantt chart.</p>");
+                        $("#ganttTimelineHeader").empty().append("<p>Error loading timeline.</p>"); // Error for timeline
                     }
                 });
             }
             
-            loadTasks(); // Initial load of tasks
+            loadTasks(); // Initial load
 
             // Handle Create Task Form Submission
             $("#createTaskForm").on("submit", function(event) {
-                event.preventDefault(); // Prevent default form submission
+                event.preventDefault(); 
 
                 var taskData = {
                     name: $("#taskName").val(),
                     startDate: $("#startDate").val(),
                     endDate: $("#endDate").val()
-                    // Ensure these dates are in YYYY-MM-DD format, 
-                    // which <input type="date"> provides by default.
                 };
 
                 $.ajax({
                     url: "/api/tasks",
                     type: "POST",
-                    contentType: "application/json", // Set content type to JSON
-                    data: JSON.stringify(taskData), // Convert JavaScript object to JSON string
+                    contentType: "application/json",
+                    data: JSON.stringify(taskData),
                     dataType: "json",
                     success: function(createdTask) {
                         console.log("Task created successfully:", createdTask);
-                        $("#createTaskForm")[0].reset(); // Reset the form fields
-                        loadTasks(); // Reload the task list to show the new task
+                        $("#createTaskForm")[0].reset(); 
+                        loadTasks(); // Reload the task list and re-render Gantt & Timeline
                     },
                     error: function(xhr, status, error) {
                         console.error("Error creating task:", status, error, xhr.responseText);
-                        alert("Error creating task: " + xhr.responseText); // Show an error message
+                        alert("Error creating task: " + xhr.responseText); 
                     }
                 });
             });
