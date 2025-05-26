@@ -9,10 +9,32 @@
     <style>
         body { font-family: sans-serif; margin: 20px; }
         h1 { color: #333; }
+        #taskFormContainer div { margin-bottom: 10px; } /* Basic styling for form rows */
+        label { display: inline-block; width: 100px; } /* Align labels */
     </style>
 </head>
 <body>
     <h1>Hello Gantt Chart!</h1>
+
+    <div id="taskFormContainer">
+        <h2>Create New Task</h2>
+        <form id="createTaskForm">
+            <div>
+                <label for="taskName">Name:</label>
+                <input type="text" id="taskName" name="name" required>
+            </div>
+            <div>
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate" name="startDate" required>
+            </div>
+            <div>
+                <label for="endDate">End Date:</label>
+                <input type="date" id="endDate" name="endDate" required>
+            </div>
+            <button type="submit">Create Task</button>
+        </form>
+    </div>
+    <hr>
 
     <!-- Placeholder for task list -->
     <div id="taskList">
@@ -30,8 +52,72 @@
 
     <script>
         $(document).ready(function() {
-            // Initial jQuery code can go here later
             console.log("Document ready. jQuery is loaded.");
+            
+            // Make loadTasks globally accessible or ensure it's callable after task creation
+            window.loadTasks = function() { // Changed to be globally accessible
+                $.ajax({
+                    url: "/api/tasks",
+                    type: "GET",
+                    dataType: "json",
+                    success: function(tasks) {
+                        var taskList = $("#tasks");
+                        taskList.empty();
+                        if (tasks && tasks.length > 0) {
+                            tasks.forEach(function(task) {
+                                var startDate = task.startDate ? new Date(task.startDate).toLocaleDateString() : 'N/A';
+                                var endDate = task.endDate ? new Date(task.endDate).toLocaleDateString() : 'N/A';
+                                taskList.append(
+                                    "<li>" +
+                                    "ID: " + task.id + ", " +
+                                    "Name: " + task.name + ", " +
+                                    "Start: " + startDate + ", " +
+                                    "End: " + endDate +
+                                    "</li>"
+                                );
+                            });
+                        } else {
+                            taskList.append("<li>No tasks found.</li>");
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error("Error loading tasks: ", status, error);
+                        $("#tasks").empty().append("<li>Error loading tasks. Check console.</li>");
+                    }
+                });
+            }
+            
+            loadTasks(); // Initial load of tasks
+
+            // Handle Create Task Form Submission
+            $("#createTaskForm").on("submit", function(event) {
+                event.preventDefault(); // Prevent default form submission
+
+                var taskData = {
+                    name: $("#taskName").val(),
+                    startDate: $("#startDate").val(),
+                    endDate: $("#endDate").val()
+                    // Ensure these dates are in YYYY-MM-DD format, 
+                    // which <input type="date"> provides by default.
+                };
+
+                $.ajax({
+                    url: "/api/tasks",
+                    type: "POST",
+                    contentType: "application/json", // Set content type to JSON
+                    data: JSON.stringify(taskData), // Convert JavaScript object to JSON string
+                    dataType: "json",
+                    success: function(createdTask) {
+                        console.log("Task created successfully:", createdTask);
+                        $("#createTaskForm")[0].reset(); // Reset the form fields
+                        loadTasks(); // Reload the task list to show the new task
+                    },
+                    error: function(xhr, status, error) {
+                        console.error("Error creating task:", status, error, xhr.responseText);
+                        alert("Error creating task: " + xhr.responseText); // Show an error message
+                    }
+                });
+            });
         });
     </script>
 </body>
