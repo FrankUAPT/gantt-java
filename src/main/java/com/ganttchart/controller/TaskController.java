@@ -5,6 +5,7 @@ import com.ganttchart.service.TaskService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -75,7 +76,10 @@ public class TaskController {
         try {
             taskService.deleteTask(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-        } catch (Exception e) { // Catch potential exceptions e.g. if task to delete not found
+        } catch (EmptyResultDataAccessException e) {
+            // Thrown when attempting to delete a non-existent task
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
